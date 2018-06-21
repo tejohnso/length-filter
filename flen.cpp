@@ -1,5 +1,5 @@
 #include <string>
-#include <sstream>
+#include <limits>
 #include <iostream>
 
 using namespace std;
@@ -10,7 +10,6 @@ int main(int argc, char *argv[]) {
   if (argc > 1) {min = atoi(argv[1]);}
   if (argc > 2) {max = atoi(argv[2]);}
 
-  cout << min <<endl << max << endl;
   for (string word; getline(cin, word);) {
     if (word.length() < min || word.length() > max) {continue;}
     cout << word << endl;
