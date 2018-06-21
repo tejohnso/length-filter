@@ -1,0 +1,127 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/workspace
+    docker:
+      - image: snapcore/snapcraft
+    steps:
+      - checkout
+      - run:
+          name: Verify required tags and changelog update for non branch channels
+          command: |
+            git tag --contains |grep [0-9]\\.[0-9]\\.[0-9]
+            git tag --contains |grep edge || git tag --contains |grep stable
+            if git tag --contains |grep ^edge$ || git tag --contains |grep ^stable$; then git diff HEAD^1 HEAD --stat --name-only |grep ^CHANGELOG.md$; fi
+
+      - run:
+          name: Set version
+          command: git tag --contains |grep [0-9]\\.[0-9]\\.[0-9] |tr -d "\n" > VERSION
+
+      - run:
+          name: Build snap
+          command: |
+            echo "Building version $(cat VERSION)"
+            sed -i "s/VERSION/$(cat VERSION)/g" snap/snapcraft.yaml
+            snapcraft
+
+      - persist_to_workspace:
+          root: ~/workspace
+          paths: ['*.snap', 'VERSION', 'snap/snapcraft.yaml']
+
+  release_snap:
+    working_directory: ~/workspace
+    docker:
+      - image: snapcore/snapcraft
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/workspace
+
+      - run:
+          name: Load credentials
+          command: |
+            echo $UBUNTU_ONE_CRED |base64 -d >credentials
+
+      - run:
+          name: Authenticate snapcraft
+          command: snapcraft login --with credentials
+
+      - run:
+          name: Push/release snap
+          command: |
+            if git tag --contains |grep edge; then snapcraft push *.snap --release $(git tag --contains |grep edge |tr -d "\n" |tr "+" "/"); fi
+            if git tag --contains |grep stable; then snapcraft push *.snap --release $(git tag --contains |grep stable |tr -d "\n" |tr "+" "/"); fi
+
+      - run:
+          name: Confirm release
+          no_output_timeout: 2m
+          command: |
+            sleep 3
+            until (snapcraft list-revisions flen |grep $(cat VERSION)); do sleep 7; done
+
+  release_github:
+    working_directory: ~/workspace
+    docker:
+      - image: circleci/buildpack-deps
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/workspace
+
+      - run:
+          name: Create github release
+          command: |
+            curl -vv -H "content-type: application/json" --data-binary "{\"body\":\"See [CHANGELOG](https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/blob/master/CHANGELOG.md) for details\",\"tag_name\":\"$(cat VERSION)\"}" -u $CIRCLE_PROJECT_USERNAME:$GITHUB_TOKEN https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases 2>&1 |grep "201 Created"
+
+  release_aur:
+    working_directory: ~/workspace
+    docker:
+      - image: circleci/buildpack-deps
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/workspace
+
+      - run:
+          name: Update AUR
+          command: |
+            cd /tmp
+            echo -n $AUR_FINGERPRINT |base64 -d >> ~/.ssh/known_hosts
+            git clone ssh://aur@aur.archlinux.org/flen.git
+            cd flen
+            git config user.name "$AUR_USER_NAME"
+            git config user.email "$AUR_USER_EMAIL"
+            sed -i "s/[0-9]\.[0-9]\.[0-9]/$(cat ~/workspace/VERSION)/g" .SRCINFO
+            sed -i "s/pkgver=.*/pkgver=$(cat ~/workspace/VERSION)/" PKGBUILD
+            git add .
+            git commit -m $(cat ~/workspace/VERSION)
+            git push
+
+workflows:
+  version: 2
+  workflow:
+    jobs:
+      - build:
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /stable|edge.*/
+      - release_snap:
+          filters:
+            tags:
+              only: /stable|edge.*/
+          requires:
+            - build
+      - release_aur:
+          filters:
+            tags:
+              only: /stable|edge/
+          requires:
+            - build
+      - release_github:
+          filters:
+            tags:
+              only: /stable|edge/
+          requires:
+            - build

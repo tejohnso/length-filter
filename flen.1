@@ -1,0 +1,26 @@
+.TH flen 1 " " "flen-VERSION"
+
+.SH NAME
+flen - word length filter for stdin
+
+.SH SYNOPSIS
+flen [min-length] [max-length]
+
+.SH DESCRIPTION
+FLEN will read STDIN and output newline delimited words to stdout if their length is within min-length and max-length (inclusive).
+
+.SH EXAMPLE
+Filter words that are less than 4 characters long.
+.I flen 4
+
+Filter words that are less than 4 characters long or greater than 10 characters long.
+.I flen 4 10
+
+.SH BUGS
+https://github.com/tejohnso/length-filter/issues
+
+.SH AUTHOR
+https://github.com/tejohnso
+
+.SH SEE ALSO
+tr(1) cut(1) stdin(3)

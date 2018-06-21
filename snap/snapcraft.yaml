@@ -1,0 +1,27 @@
+name: flen
+version: 'VERSION'
+summary: Word length filter for STDIN
+description: Word length filter for STDIN
+grade: stable
+confinement: strict
+
+apps:
+  flen:
+    command: bin/flen
+
+parts:
+  flen:
+    source: .
+    build-packages:
+      - g++
+    plugin: nil
+    override-build: |
+      g++ -O3 -std=c++17 -Wall -o flen flen.cpp
+      install -D flen $SNAPCRAFT_PART_INSTALL/bin/flen
+      install -Dm644 flen.1 $SNAPCRAFT_PART_INSTALL/man/man1/flen.1
+    stage:
+      - bin/flen
+      - man/man1/flen.1
+    prime:
+      - bin/flen
+      - man/man1/flen.1
